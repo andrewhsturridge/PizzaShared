@@ -40,13 +40,14 @@ bool begin(uint8_t channel) {
   if (s_inited) return true;
 
   WiFi.mode(WIFI_STA);
+  WiFi.persistent(false);
   WiFi.disconnect(true, true);
   delay(50);
 
   // Lock radio to our ESPNOW runtime channel
-  esp_wifi_set_promiscuous(true);
+  esp_wifi_start();
+  esp_wifi_set_ps(WIFI_PS_NONE);
   esp_wifi_set_channel(channel, WIFI_SECOND_CHAN_NONE);
-  esp_wifi_set_promiscuous(false);
 
   if (esp_now_init() != ESP_OK) { PZ_LOGE("esp_now_init failed"); return false; }
 

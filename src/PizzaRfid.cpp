@@ -15,7 +15,6 @@ static bool anyCardPresent() {
 
 namespace PizzaRfid {
   bool begin(uint8_t cs, uint8_t rst){
-    SPI.begin();                      // sketch sets pins; this starts the bus
     if (s_rfid) { delete s_rfid; s_rfid=nullptr; }
     s_rfid = new MFRC522(cs, rst);
     s_rfid->PCD_Init();
