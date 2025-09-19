@@ -68,7 +68,7 @@ struct OtaStartPayload {
   uint8_t target_role; // Role
   uint8_t scope;       // 0=ALL, 1=LIST
   uint8_t ids[8];      // house ids if scope=LIST (unused filled with 0)
-  char    url[96];     // absolute URL (http://host:port/...bin)
+  char    url[160];     // absolute URL (http://host:port/...bin)
   char    ver[12];
 };
 

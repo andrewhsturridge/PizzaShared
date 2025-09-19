@@ -33,4 +33,4 @@
 #define ACK_TIMEOUT_MS      60
 #define ACK_RETRIES         2
 #define HELLO_BACKOFF_MS    500
-#define OTA_TOTAL_MS        60000
+#define OTA_TOTAL_MS        120000
