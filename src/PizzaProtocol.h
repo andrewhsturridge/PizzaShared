@@ -17,7 +17,9 @@ enum MsgType : uint8_t {
   PANEL_TEXT, SOUND_PLAY,
   DELIVER_SCAN, DELIVER_RESULT,
   OTA_START, OTA_ACK, OTA_RESULT,
-  ACK_GENERIC
+  ACK_GENERIC,
+  // Device claiming/provisioning (set house_id permanently in NVS)
+  CLAIM = 200
 };
 
 // ===== Packed header (keep payloads small: <= ~200B total) =====
@@ -68,6 +70,12 @@ struct OtaStartPayload {
   uint8_t ids[8];      // house ids if scope=LIST (unused filled with 0)
   char    url[96];     // absolute URL (http://host:port/...bin)
   char    ver[12];
+};
+
+struct ClaimPayload {
+  uint8_t target_mac[6];  // device to claim (STA MAC)
+  uint8_t house_id;       // new house id (1..6)
+  uint8_t force;          // 0=no (only if unclaimed), 1=yes (overwrite)
 };
 
 struct OtaAckPayload { uint8_t accept; uint8_t code; };    // 1/0
