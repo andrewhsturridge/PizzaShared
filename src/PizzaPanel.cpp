@@ -6,7 +6,7 @@ static uint8_t rgbPins[]  = {42,41,40,38,39,37};
 static uint8_t addrPins[] = {45,36,48,35}; // 64x32 → A..D only
 static uint8_t clockPin=2, latchPin=47, oePin=14;
 
-static Adafruit_Protomatter matrix(64, 4, 1, rgbPins, 4, addrPins,
+static Adafruit_Protomatter matrix(64, 3, 1, rgbPins, 4, addrPins,
                                    clockPin, latchPin, oePin, true);
 
 static uint8_t  s_bright  = 100;
@@ -15,6 +15,9 @@ static uint8_t  s_speed   = 1;     // 1..5
 static String   s_text    = "ONLINE";
 static int16_t  s_scrollX = 0;
 static uint16_t s_textW   = 0, s_textH = 8;
+
+static int  s_barLastCols = -1;        // last lit pixel count (0..64), -1 = uninit
+static const int BAR_Y = 31;           // bottom row (0-based), 1-px tall
 
 static inline uint16_t dim565(uint8_t r, uint8_t g, uint8_t b) {
   uint16_t rs = (uint16_t)r * s_bright / 255;
@@ -78,4 +81,41 @@ void PizzaPanel::loop() {
 
   s_scrollX -= 1;
   if (s_scrollX + (int)s_textW < 0) s_scrollX = 64;
+}
+
+void PizzaPanel::progressBarReset() {
+  // Full-frame blackout so any prior text is gone
+  matrix.fillScreen(0);
+  matrix.show();
+
+  // Force bar re-init on next call
+  s_barLastCols = -1;
+}
+
+void PizzaPanel::showBottomBarPercent(uint8_t percent) {
+  if (percent > 100) percent = 100;
+
+  // Map to coarse 20% steps: 0,20,40,60,80,100 -> 0..64 columns
+  uint8_t step = percent / 20;         // 0..5
+  int cols = (step * 64) / 5;          // integer pixels to light
+
+  // First frame: make sure the bottom row is black once
+  if (s_barLastCols < 0) {
+    // clear just the bottom row (no full-screen clear)
+    matrix.drawFastHLine(0, BAR_Y, 64, 0);
+    s_barLastCols = 0;
+  }
+
+  if (cols == s_barLastCols) return;   // nothing new to draw
+
+  if (cols > s_barLastCols) {
+    // grow: draw only the newly added green slice
+    matrix.drawFastHLine(s_barLastCols, BAR_Y, cols - s_barLastCols, matrix.color565(0,255,0));
+  } else {
+    // shrink (shouldn't happen in OTA, but keep it correct)
+    matrix.drawFastHLine(cols, BAR_Y, s_barLastCols - cols, 0);
+  }
+
+  s_barLastCols = cols;
+  matrix.show();                        // one full-frame present per 20% milestone
 }

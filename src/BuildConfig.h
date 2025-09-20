@@ -34,3 +34,8 @@
 #define ACK_RETRIES         2
 #define HELLO_BACKOFF_MS    500
 #define OTA_TOTAL_MS        120000
+
+#ifndef OTA_DONE_HOLD_MS
+#define OTA_DONE_HOLD_MS 1000   // 1 second hold before ESP.restart()
+#endif
+
