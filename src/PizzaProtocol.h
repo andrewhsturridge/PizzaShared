@@ -19,7 +19,8 @@ enum MsgType : uint8_t {
   OTA_START, OTA_ACK, OTA_RESULT,
   ACK_GENERIC,
   // Device claiming/provisioning (set house_id permanently in NVS)
-  CLAIM = 200
+  CLAIM = 200,
+  PIZZA_ING_UPDATE = 210
 };
 
 // ===== Packed header (keep payloads small: <= ~200B total) =====
@@ -76,6 +77,12 @@ struct ClaimPayload {
   uint8_t target_mac[6];  // device to claim (STA MAC)
   uint8_t house_id;       // new house id (1..6)
   uint8_t force;          // 0=no (only if unclaimed), 1=yes (overwrite)
+};
+
+struct PizzaIngrUpdatePayload {
+  uint8_t uid[10];
+  uint8_t uid_len;   // 4..7 typical
+  uint8_t mask;      // bit0..bit4 = pepperoni,mushrooms,peppers,pineapple,ham
 };
 
 struct OtaAckPayload { uint8_t accept; uint8_t code; };    // 1/0
