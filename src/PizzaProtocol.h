@@ -6,6 +6,11 @@
   #define PROTOCOL_VERSION 1
 #endif
 
+
+// Keep text comfortably below ESP-NOW frame limits:
+static const uint8_t PZ_ORDERS_MAX      = 6;
+static const uint8_t PZ_ORDER_TEXT_MAX  = 120;  // long clue-style orders
+
 // ===== Roles =====
 enum Role : uint8_t {
   HOUSE_PANEL, HOUSE_NODE, ORDERS_PANEL, ORDERS_NODE, PIZZA_NODE, CENTRAL
@@ -22,7 +27,10 @@ enum MsgType : uint8_t {
   CLAIM = 200,
   PIZZA_ING_UPDATE = 210,
   PIZZA_ING_QUERY    = 211,  // Pizza node asks Central for current mask of a UID
-  PIZZA_ING_SNAPSHOT = 212  // Central replies with {uid, mask, ok}
+  PIZZA_ING_SNAPSHOT = 212,  // Central replies with {uid, mask, ok}
+  ORDER_LIST_RESET  = 233,
+  ORDER_ITEM_SET    = 234,
+  ORDER_SHOW_TEXT   = 235
 };
 
 // ===== Packed header (keep payloads small: <= ~200B total) =====
@@ -98,6 +106,21 @@ struct PizzaIngrSnapshotPayload {
   uint8_t uid_len;
   uint8_t mask;      // bit0..bit4 = P, M, Pe, Pi, H
   uint8_t ok;        // 1=found, 0=unknown (treat as 0 mask)
+};
+
+struct PzOrderListResetPayload {
+  uint8_t count; // 0..PZ_ORDERS_MAX
+};
+
+struct PzOrderItemSetPayload {
+  uint8_t index;     // 0..count-1
+  uint8_t house_id;  // 1..6 (or 0 if N/A)
+  uint8_t mask;      // toppings bitmask (0..31) – for future logic
+  char    text[PZ_ORDER_TEXT_MAX]; // NUL-terminated or NUL-padded
+};
+
+struct PzOrderShowTextPayload {
+  char text[PZ_ORDER_TEXT_MAX];    // NUL-terminated or NUL-padded
 };
 
 struct OtaAckPayload { uint8_t accept; uint8_t code; };    // 1/0
