@@ -20,7 +20,9 @@ enum MsgType : uint8_t {
   ACK_GENERIC,
   // Device claiming/provisioning (set house_id permanently in NVS)
   CLAIM = 200,
-  PIZZA_ING_UPDATE = 210
+  PIZZA_ING_UPDATE = 210,
+  PIZZA_ING_QUERY    = 211,  // Pizza node asks Central for current mask of a UID
+  PIZZA_ING_SNAPSHOT = 212  // Central replies with {uid, mask, ok}
 };
 
 // ===== Packed header (keep payloads small: <= ~200B total) =====
@@ -83,6 +85,19 @@ struct PizzaIngrUpdatePayload {
   uint8_t uid[10];
   uint8_t uid_len;   // 4..7 typical
   uint8_t mask;      // bit0..bit4 = pepperoni,mushrooms,peppers,pineapple,ham
+};
+
+// Add payloads near PizzaIngrUpdatePayload:
+struct PizzaIngrQueryPayload {
+  uint8_t uid[10];
+  uint8_t uid_len;   // 4..7 typical
+};
+
+struct PizzaIngrSnapshotPayload {
+  uint8_t uid[10];
+  uint8_t uid_len;
+  uint8_t mask;      // bit0..bit4 = P, M, Pe, Pi, H
+  uint8_t ok;        // 1=found, 0=unknown (treat as 0 mask)
 };
 
 struct OtaAckPayload { uint8_t accept; uint8_t code; };    // 1/0
