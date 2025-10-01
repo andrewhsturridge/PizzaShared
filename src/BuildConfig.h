@@ -26,7 +26,7 @@
 
 // Classic ESP32 Dev Module (Arduino board id: esp32.esp32.esp32). If you pick a different board,
 // the folder name will change—update these two defines accordingly.
-#define OTA_REL_ORDERS_NODE   "PizzaDelivery/Pizza_OrdersNode/build/esp32.esp32.esp32/Pizza_OrdersNode.ino.bin"
+#define OTA_REL_ORDERS_NODE   "PizzaDelivery/Pizza_OrderStation/build/esp32.esp32.esp32/Pizza_OrderStation.ino.bin"
 #define OTA_REL_PIZZA_NODE    "PizzaDelivery/Pizza_PizzaNode/build/esp32.esp32.esp32/Pizza_PizzaNode.ino.bin"
 
 // --- Timeouts / retries ---
