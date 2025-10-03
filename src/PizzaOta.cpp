@@ -167,4 +167,13 @@ Result start(const char* url, const char* newVersion, uint32_t totalTimeoutMs) {
   return OK; // not reached
 }
 
+bool beginWifi(uint32_t timeoutMs){
+  // Reuse the exact OTA path (esp_wifi_start + WIFI_PS_NONE + status loop)
+  return wifiConnect(timeoutMs);
+}
+
+void endWifi(){
+  WiFi.disconnect(true, true);
+}
+
 } // namespace

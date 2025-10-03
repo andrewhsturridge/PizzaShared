@@ -7,6 +7,8 @@ namespace PizzaOta {
   // Progress callback: total==0 means unknown size. Called from loop context.
   typedef void (*ProgressCB)(size_t written, size_t total);
   void setProgressCallback(ProgressCB cb);
+  bool beginWifi(uint32_t timeoutMs);   // true when WL_CONNECTED
+  void endWifi();                       // clean Wi-Fi disconnect
 
   // Performs full OTA pull (blocking in loop context):
   // 1) PizzaNow::deinit()
