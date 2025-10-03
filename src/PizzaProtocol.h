@@ -30,7 +30,24 @@ enum MsgType : uint8_t {
   PIZZA_ING_SNAPSHOT = 212,  // Central replies with {uid, mask, ok}
   ORDER_LIST_RESET  = 233,
   ORDER_ITEM_SET    = 234,
-  ORDER_SHOW_TEXT   = 235
+  ORDER_SHOW_TEXT   = 235,
+  HOUSE_DIGITAL_SET = 240,
+  ASSET_SYNC        = 241,
+  ASSET_RESULT      = 242
+};
+
+// compact caps for order text on panels
+enum HousePanelMode : uint8_t {
+  PANEL_MODE_TEXT   = 0,   // use panel_text + style/speed/bright
+  PANEL_MODE_NUMBER = 1,   // panel_text carries digits "123"
+  PANEL_MODE_LETTER = 2    // panel_text carries single letter "A"
+};
+
+enum WindowFx : uint8_t {
+  WIN_FX_OFF    = 0,
+  WIN_FX_SOLID  = 1,       // HSV + brightness
+  WIN_FX_RAINBOW= 2,       // simple moving rainbow
+  WIN_FX_PARTY  = 3        // fast random splash
 };
 
 // ===== Packed header (keep payloads small: <= ~200B total) =====
@@ -125,6 +142,44 @@ struct PzOrderShowTextPayload {
 
 struct OtaAckPayload { uint8_t accept; uint8_t code; };    // 1/0
 struct OtaResultPayload { uint8_t ok; uint8_t code; };     // 1/0
+
+// One-shot "describe everything" for a House
+struct HouseDigitalSetPayload {
+  uint8_t  house_id;       // target
+  uint8_t  flags;          // b0=window, b1=panel, b2=speaker
+
+  // window
+  uint8_t  win_fx;         // WindowFx
+  uint8_t  win_h, win_s, win_v;
+  uint8_t  win_speed;      // 0..255 (effect-dependent)
+
+  // panel
+  uint8_t  panel_mode;     // HousePanelMode
+  char     panel_text[24]; // small & fast
+  uint8_t  panel_style;    // 0..n (same as PANEL_TEXT)
+  uint8_t  panel_speed;    // 1..5
+  uint8_t  panel_bright;   // 0..255
+
+  // speaker
+  uint8_t  spk_clip;       // 1..N -> "/clips/NNN.wav"
+  uint8_t  spk_vol;        // 0..255
+  uint8_t  spk_flags;      // b0=loop, b1=stop (stop wins)
+};
+
+// Tell a HouseNode to fetch clip files into /clips
+struct AssetSyncPayload {
+  uint8_t  house_id;          // target node
+  char     base_url[96];      // e.g. "http://10.0.0.5/pizza/h3"
+  uint8_t  count;             // how many clips to fetch: 1..30
+};
+
+// Optional result message (progress/OK)
+struct AssetResultPayload {
+  uint8_t  house_id;
+  uint8_t  ok;                // 1=ok, 0=err
+  uint8_t  count_done;        // fetched successfully
+  uint8_t  code;              // 0=ok, else small error codes
+};
 
 // ===== Helpers =====
 namespace PizzaProtocol {
