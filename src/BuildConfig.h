@@ -31,6 +31,23 @@
   #define OTA_BASE_URL            OTA_BASE_URL_DEFAULT
 #endif
 
+// --- OTA / Wi-Fi tunables ---
+#ifndef OTA_WIFI_CONNECT_MS
+  #define OTA_WIFI_CONNECT_MS   45000   // per-attempt connect budget (45s)
+#endif
+#ifndef OTA_WIFI_RETRIES
+  #define OTA_WIFI_RETRIES      4       // total attempts
+#endif
+#ifndef OTA_RETRY_BACKOFF_MS
+  #define OTA_RETRY_BACKOFF_MS  3000    // gap between attempts
+#endif
+#ifndef OTA_HTTP_CONNECT_MS
+  #define OTA_HTTP_CONNECT_MS   20000   // HTTP connect timeout
+#endif
+#ifndef OTA_HTTP_TOTAL_MS
+  #define OTA_HTTP_TOTAL_MS     60000   // HTTP total read timeout
+#endif
+
 // --- Role-relative .bin paths (Arduino "Export compiled binary" output) ---
 // NOTE: Keep these in sync with your sketch folder names & selected boards.
 // MatrixPortal S3 build folder ID (from you): esp32.esp32.adafruit_matrixportal_esp32s3

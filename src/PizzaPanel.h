@@ -1,22 +1,35 @@
-// PizzaPanel.h  (add the note; no signature change)
 #pragma once
-#include <Arduino.h>
+#include <stdint.h>
+#include <Adafruit_GFX.h>
 
 namespace PizzaPanel {
-  bool begin64x32(uint8_t brightness = 100);
-  
-  // Text color (RGB 0..255); brightness still honored by s_bright
-  void setColor(uint8_t r, uint8_t g, uint8_t b);
 
-  // style: 0 = horizontal marquee, 1 = static, 2 = wrapped vertical (auto static/scroll), 3 = single-line vertical marquee
-  void showText(const char* text, uint8_t style, uint8_t speed, uint8_t bright);
-  
-  void setWeight(uint8_t weight);  // 0=normal, 1=bold, 2=extra bold
+// Initialize MatrixPortal S3 64x32 display. Returns true on success.
+bool begin64x32(uint8_t brightness);
 
-  // Call every loop() for animations
-  void loop();
+// High-level text API
+// style: 0 = horizontal marquee, 1 = static (now auto-fit + centered), 2 = wrapped vertical,
+//        3 = single-line vertical marquee (bottom -> top)
+// speed: 0..5 (used by marquee styles)
+void showText(const char* text, uint8_t style, uint8_t speed, uint8_t bright);
 
-  // Optional OTA bar
-  void progressBarReset();
-  void showBottomBarPercent(uint8_t percent);
-}
+// Call regularly from loop(); advances marquee/scroll styles (0,2,3).
+void loop();
+
+// OTA progress helpers
+void progressBarReset();
+void showBottomBarPercent(uint8_t percent);
+
+// Appearance controls
+void setWeight(uint8_t weight /*0..2*/);          // faux-bold 0=normal,1=bold,2=extra
+void setColor(uint8_t r, uint8_t g, uint8_t b);   // text color
+void setBrightness(uint8_t brightness);           // 0..255 global panel brightness
+
+// Low-level helpers (optional)
+// show(): flush the current frame to the panel (Protomatter .show()).
+void show();
+
+// gfx(): get an Adafruit_GFX reference to the panel for custom drawing.
+Adafruit_GFX& gfx();
+
+} // namespace PizzaPanel

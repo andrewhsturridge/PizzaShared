@@ -3,66 +3,80 @@
 #include "PizzaNow.h"
 #include "PizzaUtils.h"
 #include "PizzaNetCfg.h"
+#include "BuildConfig.h"
 
 #include <WiFi.h>
 #include <HTTPClient.h>
 #include <Update.h>
 #include <esp_wifi.h>
 
+#ifndef OTA_WIFI_CONNECT_MS
+  #define OTA_WIFI_CONNECT_MS   45000
+#endif
+#ifndef OTA_WIFI_RETRIES
+  #define OTA_WIFI_RETRIES      4
+#endif
+#ifndef OTA_RETRY_BACKOFF_MS
+  #define OTA_RETRY_BACKOFF_MS  3000
+#endif
+
 namespace PizzaOta {
 
 static ProgressCB s_cb = nullptr;
 void setProgressCallback(ProgressCB cb){ s_cb = cb; }
 
-static const char* wlName(wl_status_t s) {
-  switch (s) {
-    case WL_IDLE_STATUS:   return "IDLE";
-    case WL_SCAN_COMPLETED:return "SCAN_DONE";
+static const char* wlName(wl_status_t s){
+  switch (s){
+    case WL_IDLE_STATUS: return "IDLE";
     case WL_NO_SSID_AVAIL: return "NO_SSID";
-    case WL_CONNECT_FAILED:return "CONNECT_FAIL";
-    case WL_CONNECTION_LOST:return "CONN_LOST";
-    case WL_DISCONNECTED:  return "DISCONNECTED";
-    case WL_CONNECTED:     return "CONNECTED";
-    default:               return "UNKNOWN";
+    case WL_SCAN_COMPLETED: return "SCAN_DONE";
+    case WL_CONNECTED: return "CONNECTED";
+    case WL_CONNECT_FAILED: return "CONNECT_FAILED";
+    case WL_CONNECTION_LOST: return "CONN_LOST";
+    case WL_DISCONNECTED: return "DISCONNECTED";
+    default: return "UNKNOWN";
   }
 }
 
-static bool wifiConnect(uint32_t timeoutMs) {
-  NetCfg::Value net{};
-  NetCfg::load(net);
-
-  // 1) Ensure clean STA state
+static void wifiResetSta() {
   WiFi.persistent(false);
   WiFi.mode(WIFI_STA);
-  WiFi.disconnect(true, true);   // drop and clear creds
+  WiFi.disconnect(true, true);  // drop + clear creds
+  esp_wifi_stop();
   delay(50);
-
-  // 2) Make sure driver is up and not in PS
-  esp_wifi_stop();               // stop if running (ok if already stopped)
-  esp_wifi_start();              // start fresh
+  esp_wifi_start();
   esp_wifi_set_ps(WIFI_PS_NONE);
+}
 
-  // 3) Begin once with runtime creds
-  PZ_LOGI("WiFi: begin ssid=\"%s\"", net.ssid);
-  WiFi.begin(net.ssid, net.pass);
+// NOTE: free function, not a class member
+static bool wifiConnect(uint32_t /*timeoutMs_unused*/) {
+  NetCfg::Value net{}; NetCfg::load(net);
 
-  // 4) Wait for CONNECTED or timeout, logging transitions
-  uint32_t t0 = millis();
-  wl_status_t last = (wl_status_t)255;
-  while (true) {
-    wl_status_t st = WiFi.status();
-    if (st != last) { last = st; PZ_LOGI("WiFi: status=%s", wlName(st)); }
-    if (st == WL_CONNECTED) {
-      PZ_LOGI("WiFi: IP %s ch=%d RSSI=%d",
-        WiFi.localIP().toString().c_str(), WiFi.channel(), WiFi.RSSI());
-      return true;
+  for (int attempt = 1; attempt <= OTA_WIFI_RETRIES; ++attempt) {
+    wifiResetSta();
+    PZ_LOGI("WiFi: attempt %d/%d begin ssid=\"%s\"", attempt, OTA_WIFI_RETRIES, net.ssid);
+    WiFi.begin(net.ssid, net.pass);
+
+    uint32_t t0 = millis();
+    wl_status_t last = (wl_status_t)255;
+    while (true) {
+      wl_status_t st = WiFi.status();
+      if (st != last) { last = st; PZ_LOGI("WiFi: status=%s", wlName(st)); }
+      if (st == WL_CONNECTED) {
+        PZ_LOGI("WiFi: IP %s ch=%d RSSI=%d",
+          WiFi.localIP().toString().c_str(), WiFi.channel(), WiFi.RSSI());
+        return true;
+      }
+      if (millis() - t0 > OTA_WIFI_CONNECT_MS) break;
+      delay(100);
     }
-    if ((millis() - t0) > timeoutMs) {
-      PZ_LOGE("WiFi: connect timeout (%s)", wlName(st));
-      return false;
-    }
-    delay(100);
+
+    PZ_LOGI("WiFi: attempt %d timeout (%s)", attempt, wlName(WiFi.status()));
+    WiFi.disconnect(true, true);
+    if (attempt < OTA_WIFI_RETRIES) delay(OTA_RETRY_BACKOFF_MS);
   }
+  PZ_LOGE("WiFi: all attempts failed");
+  return false;
 }
 
 Result start(const char* url, const char* newVersion, uint32_t totalTimeoutMs) {
@@ -81,8 +95,8 @@ Result start(const char* url, const char* newVersion, uint32_t totalTimeoutMs) {
   WiFiClient client; client.setTimeout(20000);
 
   HTTPClient http;
-  http.setConnectTimeout(15000);
-  http.setTimeout(20000);
+  http.setConnectTimeout(OTA_HTTP_CONNECT_MS);
+  http.setTimeout(OTA_HTTP_TOTAL_MS);
   http.setReuse(false);
   http.setFollowRedirects(HTTPC_STRICT_FOLLOW_REDIRECTS);
   http.useHTTP10(true); // avoid chunked edge cases

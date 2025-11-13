@@ -3,89 +3,94 @@
 #include <ctype.h>
 #include <math.h>
 
-// MatrixPortal S3 default pins (same as your working scroller)
+// -------- Hardware wiring (MatrixPortal S3 defaults) --------
 static uint8_t rgbPins[]  = {42,41,40,38,39,37};
-static uint8_t addrPins[] = {45,36,48,35}; // 64x32 → A..D only
+static uint8_t addrPins[] = {45,36,48,35}; // 64x32 -> A..D
 static uint8_t clockPin=2, latchPin=47, oePin=14;
 
 static Adafruit_Protomatter matrix(64, 3, 1, rgbPins, 4, addrPins,
                                    clockPin, latchPin, oePin, true);
 
-static uint8_t  s_bright  = 100;
-static uint8_t  s_style   = 1;     // default: static
-static uint8_t  s_speed   = 1;     // 1..5
+// -------- State --------
+static uint8_t  s_bright  = 100;   // global brightness (passed to matrix)
+static uint8_t  s_style   = 1;     // 0=marquee,1=static(centered fit),2=wrap,3=vert marquee
+static uint8_t  s_speed   = 1;     // 0..5
 static String   s_text    = "ONLINE";
 static int16_t  s_scrollX = 0;
-static uint16_t s_textW   = 0, s_textH = 8;
+static uint16_t s_textW   = 0, s_textH = 8; // cached for marquee styles
 
-// Text weight (stroke fattening): 0=normal, 1=bold, 2=extra bold
+// Text weight (faux bold): 0=normal,1=bold,2=extra
 static uint8_t s_weight = 0;
 
-// Accumulator-based timing for vertical scroll (style 2)
+// Vertical scroll accumulators (style 2)
 static float    s_vAccum  = 0.f;
 static uint32_t s_vLastMs = 0;
+static int      s_barLastCols = -1;   // OTA bottom bar
+static const int PANEL_W = 64;
+static const int PANEL_H = 32;
+static const int BAR_Y   = 31;
 
-static int  s_barLastCols = -1;        // last lit pixel count (0..64), -1 = uninit
-static const int BAR_Y = 31;           // bottom row (0-based), 1-px tall
-
-// --- Add near existing statics (s_text, s_style, s_speed, etc.) ---
-static char     s_linesBlob[256];     // wrapped lines blob (NUL-separated)
-static uint16_t s_lineStart[28];      // line offsets into blob
-static uint16_t s_lineWidth[28];      // px widths for centering
+// Wrapped vertical text buffers (style 2)
+static char     s_linesBlob[256];
+static uint16_t s_lineStart[28];
+static uint16_t s_lineWidth[28];
 static uint8_t  s_lineCount = 0;
-static uint8_t  s_lineH     = 9;      // default; recomputed at runtime
-static int16_t  s_baseAdj   = 7;      // baseline lift; recomputed at runtime
-static uint16_t s_blockH    = 0;      // total wrapped height
-static int16_t  s_scrollY   = 0;      // vertical scroll position
-static uint8_t  s_vMode     = 0;      // 0=static, 1=scroll (used when style==2)
+static uint8_t  s_lineH     = 9;
+static int16_t  s_baseAdj   = 7;
+static uint16_t s_blockH    = 0;
+static int16_t  s_scrollY   = 0;   // vertical scroll pos (styles 2/3)
+static uint8_t  s_vMode     = 0;   // 0=static,1=scroll for style 2
 
-// Current text color (default white)
+// Current text color (RGB888; converted to 565 on draw)
 static uint8_t s_colR = 255, s_colG = 255, s_colB = 255;
 
-// Brightness-scaled RGB565 helper
-static inline uint16_t dim565(uint8_t r, uint8_t g, uint8_t b) {
+// ---------- Internal helpers ----------
+static inline uint16_t rgb565(uint8_t r, uint8_t g, uint8_t b) {
+  // Brightness scaled here (0..255)
   uint8_t R = (uint16_t)r * s_bright / 255;
   uint8_t G = (uint16_t)g * s_bright / 255;
   uint8_t B = (uint16_t)b * s_bright / 255;
   return matrix.color565(R, G, B);
 }
 
-// Convenience for current text color
-static inline uint16_t currentColor565() { return dim565(s_colR, s_colG, s_colB); }
+static inline uint16_t currentColor565() { return rgb565(s_colR, s_colG, s_colB); }
 
-// Draw text with faux-bold passes (keeps the exact BOOT font)
+static inline void fontDefaults() {
+  matrix.setTextWrap(false);
+  matrix.setTextSize(1);
+  matrix.setFont(NULL); // 5x7 built-in
+}
+
 static inline void printWeighted(int16_t x, int16_t y, const char* s) {
   // base
   matrix.setCursor(x, y);
   matrix.print(s);
-  if (s_weight >= 1) {            // horizontal fattening
+  if (s_weight >= 1) {
     matrix.setCursor(x + 1, y);
     matrix.print(s);
   }
-  if (s_weight >= 2) {            // add a touch of vertical fattening
+  if (s_weight >= 2) {
     matrix.setCursor(x, y + 1);
     matrix.print(s);
   }
 }
 
-static inline void fontDefaults() {
-  matrix.setTextWrap(false);
-  matrix.setTextSize(1);
-  matrix.setFont(NULL); // EXACT same font as HousePanel uses
+// Measure width/height at current font size
+static void getBounds(const char* s, uint16_t& w, uint16_t& h, int16_t& x1, int16_t& y1) {
+  matrix.getTextBounds((char*)s, 0, 0, &x1, &y1, &w, &h);
+}
+
+static uint16_t measureW(const char* s) {
+  int16_t x1, y1; uint16_t w, h; getBounds(s, w, h, x1, y1);
+  return w;
 }
 
 static void computeFontMetrics() {
   fontDefaults();
   int16_t x1, y1; uint16_t w, h;
   matrix.getTextBounds((char*)"Ay", 0, 0, &x1, &y1, &w, &h);
-  s_lineH   = h + 1;  // add a pixel of spacing
+  s_lineH   = h + 1;
   s_baseAdj = -y1;
-}
-
-static uint16_t measureW(const char* s) {
-  int16_t x1, y1; uint16_t w, h;
-  matrix.getTextBounds((char*)s, 0, 0, &x1, &y1, &w, &h);
-  return w;
 }
 
 static void wrapToWidth(const char* s, uint8_t maxW) {
@@ -142,7 +147,6 @@ static void wrapToWidth(const char* s, uint8_t maxW) {
   s_blockH = s_lineCount * s_lineH;
 }
 
-// drawStaticBlock()
 static void drawStaticBlock() {
   matrix.fillScreen(0);
   matrix.setTextColor(currentColor565());
@@ -150,15 +154,14 @@ static void drawStaticBlock() {
   for (uint8_t i=0; i<s_lineCount; ++i) {
     const char* ln = &s_linesBlob[s_lineStart[i]];
     uint16_t w = s_lineWidth[i];
-    int16_t x = (int16_t)((64 - w)/2); if (x < 0) x = 0;
-    int16_t yTop  = (int16_t)((32 - s_blockH)/2);
+    int16_t x = (int16_t)((PANEL_W - w)/2); if (x < 0) x = 0;
+    int16_t yTop  = (int16_t)((PANEL_H - s_blockH)/2);
     int16_t yBase = yTop + s_baseAdj + i * s_lineH;
     printWeighted(x, yBase, ln);
   }
   matrix.show();
 }
 
-// drawScrolledBlock()
 static void drawScrolledBlock(int16_t yTop) {
   matrix.fillScreen(0);
   matrix.setTextColor(currentColor565());
@@ -166,129 +169,150 @@ static void drawScrolledBlock(int16_t yTop) {
   for (uint8_t i=0; i<s_lineCount; ++i) {
     const char* ln = &s_linesBlob[s_lineStart[i]];
     uint16_t w = s_lineWidth[i];
-    int16_t x = (int16_t)((64 - w)/2); if (x < 0) x = 0;
+    int16_t x = (int16_t)((PANEL_W - w)/2); if (x < 0) x = 0;
     int16_t yBase = yTop + s_baseAdj + i * s_lineH;
-    if (yBase < -s_lineH || yBase > (32 + s_lineH)) continue;
+    if (yBase < -s_lineH || yBase > (PANEL_H + s_lineH)) continue;
     printWeighted(x, yBase, ln);
   }
   matrix.show();
 }
 
-bool PizzaPanel::begin64x32(uint8_t brightness) {
+// -------- Fit-to-screen (static) with centered layout (style 1) --------
+static bool fitAndCenterSingleLine(const String& s) {
+  // Try sizes from large to small (built-in font scaled with setTextSize)
+  matrix.setTextWrap(false);
+  int16_t x1, y1; uint16_t w, h;
+  for (int sz = 10; sz >= 1; --sz) {
+    matrix.setTextSize(sz);
+    matrix.getTextBounds(s.c_str(), 0, 0, &x1, &y1, &w, &h);
+    if (w <= PANEL_W - 2 && h <= PANEL_H - 2) {
+      // Center & draw
+      matrix.fillScreen(0);
+      int16_t x = (int16_t)((PANEL_W - w)/2) - x1;
+      int16_t y = (int16_t)((PANEL_H - h)/2) - y1;
+      matrix.setCursor(x, y);
+      matrix.setTextColor(currentColor565());
+      printWeighted(x, y, s.c_str()); // printWeighted sets cursor internally; pass coords
+      matrix.show();
+      return true;
+    }
+  }
+  return false; // didn’t fit even at size 1
+}
+
+// ---------- Public API ----------
+namespace PizzaPanel {
+
+bool begin64x32(uint8_t brightness) {
   s_bright = brightness;
   auto st = matrix.begin();
+
   // Proof-of-life border
   matrix.fillScreen(0);
-  matrix.drawRect(0,0,63,31, dim565(255,255,255));
-  matrix.drawPixel(0,0, dim565(255,0,0));
-  matrix.drawPixel(63,31, dim565(0,255,0));
+  matrix.drawRect(0,0,PANEL_W-1,PANEL_H-1, rgb565(255,255,255));
+  matrix.drawPixel(0,0,   rgb565(255,0,0));
+  matrix.drawPixel(PANEL_W-1,PANEL_H-1, rgb565(0,255,0));
   matrix.show();
   delay(150);
   return st == PROTOMATTER_OK;
 }
 
-void PizzaPanel::showText(const char* text, uint8_t style, uint8_t speed, uint8_t bright) {
+void setBrightness(uint8_t brightness) {
+  s_bright = brightness;
+}
+
+void setWeight(uint8_t weight) { s_weight = (weight > 2) ? 2 : weight; }
+void setColor(uint8_t r, uint8_t g, uint8_t b) { s_colR = r; s_colG = g; s_colB = b; }
+
+void showText(const char* text, uint8_t style, uint8_t speed, uint8_t bright) {
   if (text) s_text = text;
   s_style  = style;
-  s_speed  = constrain(speed, 0, 5);   // allow 0 if you enabled extra-slow
-  s_bright = bright;
+  s_speed  = (speed > 5) ? 5 : speed;
+  setBrightness(bright);
 
   fontDefaults();
   matrix.setTextColor(currentColor565());
 
-  // --------- STYLE 2: wrapped vertical (static if fits; else bottom→top) ---------
+  // STYLE 2: wrapped vertical (static if block fits; else bottom->top scroll)
   if (s_style == 2) {
     computeFontMetrics();
-    wrapToWidth(s_text.c_str(), 64 - 2);
-
-    // init accumulators if you added extra-slow support
+    wrapToWidth(s_text.c_str(), PANEL_W - 2);
     s_vAccum  = 0.f;
     s_vLastMs = millis();
 
     matrix.fillScreen(0);
 
-    if (s_blockH <= 32) {
+    if (s_blockH <= PANEL_H) {
       s_vMode = 0;
       drawStaticBlock();
     } else {
-      // bottom-aligned first frame (no centered flash)
-      int16_t yTop = 32 - (int16_t)s_blockH;
+      int16_t yTop = PANEL_H - (int16_t)s_blockH; // start bottom-aligned
       drawScrolledBlock(yTop);
       s_vMode   = 1;
-      s_scrollY = 32;  // loop() will scroll up from the bottom
+      s_scrollY = PANEL_H; // loop() will scroll up
     }
     return;
   }
 
-  // --------- STYLE 3: single-line vertical marquee (bottom→top) ---------
+  // STYLE 3: single-line vertical marquee (bottom->top)
   if (s_style == 3) {
-    int16_t x1,y1; matrix.getTextBounds(s_text.c_str(), 0, 0, &x1, &y1, &s_textW, &s_textH);
-    s_scrollY = 32 + (int16_t)s_textH;
-
+    int16_t x1,y1; matrix.getTextBounds(s_text.c_str(), 0,0, &x1,&y1, &s_textW,&s_textH);
+    s_scrollY = PANEL_H + (int16_t)s_textH;
     matrix.fillScreen(0);
     fontDefaults();
-    int16_t x = (int16_t)((64 - (int)s_textW)/2); if (x < 0) x = 0;
+    int16_t x = (int16_t)((PANEL_W - (int)s_textW)/2); if (x < 0) x = 0;
     printWeighted(x, s_scrollY, s_text.c_str());
     matrix.show();
     return;
   }
 
-  // --------- STYLE 0/1 (horizontal marquee / static) ---------
-  int16_t x1,y1; matrix.getTextBounds(s_text.c_str(), 0, 0, &x1, &y1, &s_textW, &s_textH);
-  const int16_t yBase = (32 - 8)/2 + 7;  // same baseline as before
-  s_scrollX = 64;
+  // STYLE 1: static (now: fit to screen & centered; else fallback to marquee)
+  if (s_style == 1) {
+    if (fitAndCenterSingleLine(s_text)) return;
+    // fallback to marquee
+    s_style = 0;
+  }
 
-  matrix.fillScreen(0);
-
-  if (s_style == 0) { // horizontal marquee
+  // STYLE 0: horizontal marquee
+  {
+    int16_t x1,y1; matrix.getTextBounds(s_text.c_str(), 0,0, &x1,&y1, &s_textW,&s_textH);
+    const int16_t yBase = (PANEL_H - 8)/2 + 7; // baseline for size=1
+    s_scrollX = PANEL_W;
+    matrix.fillScreen(0);
     printWeighted(s_scrollX, yBase, s_text.c_str());
     matrix.show();
     return;
   }
-
-  if (s_style == 1) { // static
-    printWeighted(0, yBase, s_text.c_str());
-    matrix.show();
-    return;
-  }
-
-  // Fallback
-  printWeighted(0, yBase, s_text.c_str());
-  matrix.show();
 }
 
-
-void PizzaPanel::loop() {
-  // style 0: horizontal marquee (existing behavior)
+void loop() {
+  // style 0: horizontal marquee
   if (s_style == 0) {
     static uint32_t last=0;
     const uint32_t frameMs = (uint32_t)(1000 / (15 + s_speed*10)); // ~25..65 fps
-    if (millis() - last < frameMs) return;
-    last = millis();
+    uint32_t now = millis();
+    if (now - last < frameMs) return;
+    last = now;
 
     matrix.fillScreen(0);
-    const int16_t yBase = (32 - 8)/2 + 7;
-	matrix.setTextColor(currentColor565());
+    const int16_t yBase = (PANEL_H - 8)/2 + 7;
+    matrix.setTextColor(currentColor565());
     fontDefaults();
-	printWeighted(s_scrollX, yBase, s_text.c_str());
+    printWeighted(s_scrollX, yBase, s_text.c_str());
     matrix.show();
 
     s_scrollX -= 1;
-    if (s_scrollX + (int)s_textW < 0) s_scrollX = 64;
+    if (s_scrollX + (int)s_textW < 0) s_scrollX = PANEL_W;
     return;
   }
 
   // style 2: wrapped vertical scroll
   if (s_style == 2 && s_vMode == 1) {
-    // Extra-slow accumulator version (works even slower than speed=1)
-    // If you didn't add s_vAccum/s_vLastMs statics yet, see Block 3 below.
     static uint32_t dwell = 0;
-
     uint32_t now = millis();
     float dt = (now - s_vLastMs) / 1000.0f;
     s_vLastMs = now;
 
-    // Pixels-per-second for speeds 0..5 (tweak to taste)
     static const float PXPS[6] = { 3.f, 6.f, 10.f, 15.f, 20.f, 24.f };
     uint8_t idx = (s_speed > 5) ? 5 : s_speed;
     float v = PXPS[idx];
@@ -297,79 +321,70 @@ void PizzaPanel::loop() {
     int steps = (int)floorf(s_vAccum);
     if (steps >= 1) {
       s_vAccum -= steps;
-      s_scrollY -= steps;             // move up
-      drawScrolledBlock(s_scrollY);   // <-- your existing helper
+      s_scrollY -= steps;           // move up
+      drawScrolledBlock(s_scrollY);
     }
 
     if (s_scrollY <= -(int16_t)s_blockH) {
       if (!dwell) { dwell = now; return; }
-      if (now - dwell > 700) { dwell = 0; s_scrollY = 32; }
+      if (now - dwell > 700) { dwell = 0; s_scrollY = PANEL_H; }
     }
     return;
   }
-  // style 3: single-line vertical marquee (bottom -> top)
+
+  // style 3: single-line vertical marquee
   if (s_style == 3) {
     static uint32_t last = 0;
-    const uint32_t frameMs = (uint32_t)(1000 / (15 + s_speed*10)); // same pacing as style 0
+    const uint32_t frameMs = (uint32_t)(1000 / (15 + s_speed*10));
     uint32_t now = millis();
     if (now - last < frameMs) return;
     last = now;
 
     matrix.fillScreen(0);
-	matrix.setTextColor(currentColor565());
+    matrix.setTextColor(currentColor565());
     fontDefaults();
-    int16_t x = (int16_t)((64 - (int)s_textW)/2); if (x < 0) x = 0;  // center; set x=0 for left align
-	printWeighted(x, s_scrollY, s_text.c_str());
+    int16_t x = (int16_t)((PANEL_W - (int)s_textW)/2); if (x < 0) x = 0;
+    printWeighted(x, s_scrollY, s_text.c_str());
     matrix.show();
 
-    s_scrollY -= 1;                              // move up 1 px per frame
-    if (s_scrollY + (int)s_textH < 0) {          // fully off the top?
-      s_scrollY = 32 + s_textH;                  // restart from bottom
+    s_scrollY -= 1;
+    if (s_scrollY + (int)s_textH < 0) {
+      s_scrollY = PANEL_H + s_textH;
     }
     return;
   }
 }
 
-void PizzaPanel::progressBarReset() {
-  // Full-frame blackout so any prior text is gone
+void progressBarReset() {
   matrix.fillScreen(0);
   matrix.show();
-
-  // Force bar re-init on next call
   s_barLastCols = -1;
 }
 
-void PizzaPanel::showBottomBarPercent(uint8_t percent) {
+void showBottomBarPercent(uint8_t percent) {
   if (percent > 100) percent = 100;
 
-  // Map to coarse 20% steps: 0,20,40,60,80,100 -> 0..64 columns
-  uint8_t step = percent / 20;         // 0..5
-  int cols = (step * 64) / 5;          // integer pixels to light
+  uint8_t step = percent / 20;            // 0..5
+  int cols = (step * PANEL_W) / 5;        // 0..64
 
-  // First frame: make sure the bottom row is black once
   if (s_barLastCols < 0) {
-    // clear just the bottom row (no full-screen clear)
-    matrix.drawFastHLine(0, BAR_Y, 64, 0);
+    matrix.drawFastHLine(0, BAR_Y, PANEL_W, 0);
     s_barLastCols = 0;
   }
 
-  if (cols == s_barLastCols) return;   // nothing new to draw
+  if (cols == s_barLastCols) return;
 
   if (cols > s_barLastCols) {
-    // grow: draw only the newly added green slice
-    matrix.drawFastHLine(s_barLastCols, BAR_Y, cols - s_barLastCols, matrix.color565(0,255,0));
+    matrix.drawFastHLine(s_barLastCols, BAR_Y, cols - s_barLastCols, rgb565(0,255,0));
   } else {
-    // shrink (shouldn't happen in OTA, but keep it correct)
     matrix.drawFastHLine(cols, BAR_Y, s_barLastCols - cols, 0);
   }
 
   s_barLastCols = cols;
-  matrix.show();                        // one full-frame present per 20% milestone
+  matrix.show();
 }
 
-void PizzaPanel::setWeight(uint8_t weight) { s_weight = (weight > 2) ? 2 : weight; }
+void show() { matrix.show(); }
+Adafruit_GFX& gfx() { return (Adafruit_GFX&)matrix; }
 
-void PizzaPanel::setColor(uint8_t r, uint8_t g, uint8_t b) {
-  s_colR = r; s_colG = g; s_colB = b;
-}
-
+} // namespace PizzaPanel
