@@ -7,12 +7,29 @@
 // --- Radio (runtime) ---
 #define ESPNOW_CHANNEL     6   // fixed; Wi-Fi STA only during OTA window
 
-// --- OTA Wi-Fi (updates only) ---
-#define WIFI_SSID          "GUD"
-#define WIFI_PASS          "EscapE66"
+// --- Network defaults (used by NetCfg compiled defaults) ---
+#ifndef WIFI_DEFAULT_SSID
+  #define WIFI_DEFAULT_SSID       "AndrewiPhone"
+#endif
+#ifndef WIFI_DEFAULT_PASS
+  #define WIFI_DEFAULT_PASS       "12345678"
+#endif
+#ifndef OTA_BASE_URL_DEFAULT
+  // Example: your MacBook’s simple HTTP host for assets/firmware
+  #define OTA_BASE_URL_DEFAULT    "http://172.20.10.2:8000/"
+#endif
 
-// --- OTA base host (your dev box running: python3 -m http.server 8000) ---
-#define OTA_BASE_URL       "http://192.168.2.231:8000/"
+// ---- Back-compat aliases (optional) ----
+// If any old code still references these, it will now pick up the new defaults.
+#ifndef WIFI_SSID
+  #define WIFI_SSID               WIFI_DEFAULT_SSID
+#endif
+#ifndef WIFI_PASS
+  #define WIFI_PASS               WIFI_DEFAULT_PASS
+#endif
+#ifndef OTA_BASE_URL
+  #define OTA_BASE_URL            OTA_BASE_URL_DEFAULT
+#endif
 
 // --- Role-relative .bin paths (Arduino "Export compiled binary" output) ---
 // NOTE: Keep these in sync with your sketch folder names & selected boards.

@@ -2,6 +2,7 @@
 #include "BuildConfig.h"
 #include "PizzaNow.h"
 #include "PizzaUtils.h"
+#include "PizzaNetCfg.h"
 
 #include <WiFi.h>
 #include <HTTPClient.h>
@@ -27,18 +28,25 @@ static const char* wlName(wl_status_t s) {
 }
 
 static bool wifiConnect(uint32_t timeoutMs) {
-  PZ_LOGI("WiFi: connecting to SSID=%s", WIFI_SSID);
+  NetCfg::Value net{};
+  NetCfg::load(net);
 
+  // 1) Ensure clean STA state
   WiFi.persistent(false);
   WiFi.mode(WIFI_STA);
-  WiFi.disconnect(true, true);
+  WiFi.disconnect(true, true);   // drop and clear creds
   delay(50);
 
-  esp_wifi_start();                  // OK if already started
+  // 2) Make sure driver is up and not in PS
+  esp_wifi_stop();               // stop if running (ok if already stopped)
+  esp_wifi_start();              // start fresh
   esp_wifi_set_ps(WIFI_PS_NONE);
 
-  WiFi.begin(WIFI_SSID, WIFI_PASS);
+  // 3) Begin once with runtime creds
+  PZ_LOGI("WiFi: begin ssid=\"%s\"", net.ssid);
+  WiFi.begin(net.ssid, net.pass);
 
+  // 4) Wait for CONNECTED or timeout, logging transitions
   uint32_t t0 = millis();
   wl_status_t last = (wl_status_t)255;
   while (true) {

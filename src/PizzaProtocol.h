@@ -33,7 +33,8 @@ enum MsgType : uint8_t {
   ORDER_SHOW_TEXT   = 235,
   HOUSE_DIGITAL_SET = 240,
   ASSET_SYNC        = 241,
-  ASSET_RESULT      = 242
+  ASSET_RESULT      = 242,
+  NET_CFG_SET       = 250
 };
 
 // compact caps for order text on panels
@@ -48,6 +49,13 @@ enum WindowFx : uint8_t {
   WIN_FX_SOLID  = 1,       // HSV + brightness
   WIN_FX_RAINBOW= 2,       // simple moving rainbow
   WIN_FX_PARTY  = 3        // fast random splash
+};
+
+enum DeliverReason : uint8_t {
+  DR_OK = 0,
+  DR_UNKNOWN_PIZZA = 1,
+  DR_NO_ORDER = 2,
+  DR_WRONG_PIZZA = 3,
 };
 
 // ===== Packed header (keep payloads small: <= ~200B total) =====
@@ -89,7 +97,7 @@ struct DeliverScanPayload {
 
 struct DeliverResultPayload {
   uint8_t ok;          // 1=OK, 0=ERR
-  uint8_t reason;      // 0=OK,1=wrong_house,2=unknown_tag,3=expired
+  uint8_t reason;      // 0=OK, 1=DR_UNKNOWN_PIZZA, 2=DR_NO_ORDER, 3=DR_WRONG_PIZZA
 };
 
 struct OtaStartPayload {
@@ -179,6 +187,13 @@ struct AssetResultPayload {
   uint8_t  ok;                // 1=ok, 0=err
   uint8_t  count_done;        // fetched successfully
   uint8_t  code;              // 0=ok, else small error codes
+};
+
+// SSID/PASS/BASE distribution payload
+struct NetCfgSetPayload {
+  char ssid[32];   // NUL-terminated
+  char pass[64];   // NUL-terminated
+  char base[96];   // NUL-terminated (asset/OTA base URL)  <-- was 128
 };
 
 // ===== Helpers =====
