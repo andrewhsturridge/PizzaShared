@@ -3,7 +3,9 @@
 
 // ===== Protocol version =====
 #ifndef PROTOCOL_VERSION
-  #define PROTOCOL_VERSION 1
+  // v2 adds trailing fields to ORDER_ITEM_SET payload for per-order timers.
+  // Backward-compatible if older receivers ignore trailing fields.
+  #define PROTOCOL_VERSION 2
 #endif
 
 
@@ -104,7 +106,7 @@ struct OtaStartPayload {
   uint8_t target_role; // Role
   uint8_t scope;       // 0=ALL, 1=LIST
   uint8_t ids[8];      // house ids if scope=LIST (unused filled with 0)
-  char    url[160];     // absolute URL (http://host:port/...bin)
+  char    url[160];    // absolute URL (http://host:port/...bin)
   char    ver[12];
 };
 
@@ -140,8 +142,12 @@ struct PzOrderListResetPayload {
 struct PzOrderItemSetPayload {
   uint8_t index;     // 0..count-1
   uint8_t house_id;  // 1..6 (or 0 if N/A)
-  uint8_t mask;      // toppings bitmask (0..31) – for future logic
+  uint8_t mask;      // toppings bitmask (0..31)
   char    text[PZ_ORDER_TEXT_MAX]; // NUL-terminated or NUL-padded
+
+  // ---- v2 additions (trailing) ----
+  uint16_t order_id; // stable ID for this order instance
+  uint16_t remain_s; // remaining seconds at send time
 };
 
 struct PzOrderShowTextPayload {
@@ -171,7 +177,7 @@ struct HouseDigitalSetPayload {
   // speaker
   uint8_t  spk_clip;       // 1..N -> "/clips/NNN.wav"
   uint8_t  spk_vol;        // 0..255
-  uint8_t  spk_flags;      // b0=loop, b1=stop (stop wins)
+  uint8_t  spk_flags;      // b0=loop/beacon, b1=stop (stop wins)
 };
 
 // Tell a HouseNode to fetch clip files into /clips
@@ -193,7 +199,7 @@ struct AssetResultPayload {
 struct NetCfgSetPayload {
   char ssid[32];   // NUL-terminated
   char pass[64];   // NUL-terminated
-  char base[96];   // NUL-terminated (asset/OTA base URL)  <-- was 128
+  char base[96];   // NUL-terminated (asset/OTA base URL)
 };
 
 // ===== Helpers =====

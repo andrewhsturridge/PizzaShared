@@ -1,7 +1,7 @@
 #pragma once
 
 // --- Versions ---
-#define PROTOCOL_VERSION   1
+#define PROTOCOL_VERSION   2
 #define FW_VERSION         "0.1.0"
 
 // --- Radio (runtime) ---
@@ -16,7 +16,7 @@
 #endif
 #ifndef OTA_BASE_URL_DEFAULT
   // Example: your MacBook’s simple HTTP host for assets/firmware
-  #define OTA_BASE_URL_DEFAULT    "http://172.20.10.2:8000/"
+  #define OTA_BASE_URL_DEFAULT    "http://172.20.10.3:8000/"
 #endif
 
 // ---- Back-compat aliases (optional) ----
