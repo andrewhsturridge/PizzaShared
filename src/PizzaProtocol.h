@@ -3,8 +3,6 @@
 
 // ===== Protocol version =====
 #ifndef PROTOCOL_VERSION
-  // v2 adds trailing fields to ORDER_ITEM_SET payload for per-order timers.
-  // Backward-compatible if older receivers ignore trailing fields.
   #define PROTOCOL_VERSION 2
 #endif
 
@@ -47,10 +45,25 @@ enum HousePanelMode : uint8_t {
 };
 
 enum WindowFx : uint8_t {
-  WIN_FX_OFF    = 0,
-  WIN_FX_SOLID  = 1,       // HSV + brightness
-  WIN_FX_RAINBOW= 2,       // simple moving rainbow
-  WIN_FX_PARTY  = 3        // fast random splash
+  WIN_FX_OFF         = 0,
+  WIN_FX_SOLID       = 1,   // HSV + brightness
+  WIN_FX_RAINBOW     = 2,   // legacy rainbow (kept)
+  WIN_FX_PARTY       = 3,   // disco/random splash
+
+  // --- W2 patterns (distinct, non-directional) ---
+  WIN_FX_POLICE      = 4,   // red/blue alternating
+  WIN_FX_FLICKER     = 5,   // warm candle/fireplace flicker
+  WIN_FX_SPARKLE     = 6,   // sparse white sparkles on dark
+  WIN_FX_PULSE       = 7,   // smooth breathing brightness
+  WIN_FX_STROBE      = 8,   // hard white strobe
+  WIN_FX_SPLIT_SWAP  = 9,   // half A / half B swap
+
+  // --- W3 motion/direction ---
+  WIN_FX_CHASE_CW    = 10,
+  WIN_FX_CHASE_CCW   = 11,
+  WIN_FX_BOUNCE      = 12,  // back-and-forth dot
+  WIN_FX_WEDGE_CW    = 13,
+  WIN_FX_WEDGE_CCW   = 14
 };
 
 enum DeliverReason : uint8_t {
@@ -106,7 +119,7 @@ struct OtaStartPayload {
   uint8_t target_role; // Role
   uint8_t scope;       // 0=ALL, 1=LIST
   uint8_t ids[8];      // house ids if scope=LIST (unused filled with 0)
-  char    url[160];    // absolute URL (http://host:port/...bin)
+  char    url[160];     // absolute URL (http://host:port/...bin)
   char    ver[12];
 };
 
@@ -141,12 +154,12 @@ struct PzOrderListResetPayload {
 
 struct PzOrderItemSetPayload {
   uint8_t index;     // 0..count-1
-  uint8_t house_id;  // 1..6 (or 0 if N/A)
-  uint8_t mask;      // toppings bitmask (0..31)
-  char    text[PZ_ORDER_TEXT_MAX]; // NUL-terminated or NUL-padded
+  uint8_t house_id;  // 1..6
+  uint8_t mask;      // toppings bitmask
+  char    text[PZ_ORDER_TEXT_MAX];
 
-  // ---- v2 additions (trailing) ----
-  uint16_t order_id; // stable ID for this order instance
+  // v2 additions (timers)
+  uint16_t order_id; // stable ID for the order instance
   uint16_t remain_s; // remaining seconds at send time
 };
 
@@ -177,7 +190,7 @@ struct HouseDigitalSetPayload {
   // speaker
   uint8_t  spk_clip;       // 1..N -> "/clips/NNN.wav"
   uint8_t  spk_vol;        // 0..255
-  uint8_t  spk_flags;      // b0=loop/beacon, b1=stop (stop wins)
+  uint8_t  spk_flags;      // b0=loop, b1=stop (stop wins)
 };
 
 // Tell a HouseNode to fetch clip files into /clips
@@ -199,7 +212,7 @@ struct AssetResultPayload {
 struct NetCfgSetPayload {
   char ssid[32];   // NUL-terminated
   char pass[64];   // NUL-terminated
-  char base[96];   // NUL-terminated (asset/OTA base URL)
+  char base[96];   // NUL-terminated (asset/OTA base URL)  <-- was 128
 };
 
 // ===== Helpers =====
