@@ -34,7 +34,9 @@ enum MsgType : uint8_t {
   HOUSE_DIGITAL_SET = 240,
   ASSET_SYNC        = 241,
   ASSET_RESULT      = 242,
-  NET_CFG_SET       = 250
+  NET_CFG_SET       = 250,
+  // Broadcast from Central so player stations can hard-disable inputs when the game is idle.
+  GAME_STATE        = 251
 };
 
 // compact caps for order text on panels
@@ -158,9 +160,23 @@ struct PzOrderItemSetPayload {
   uint8_t mask;      // toppings bitmask
   char    text[PZ_ORDER_TEXT_MAX];
 
+  // NOTE: Explicit pad byte to keep the v2 timer fields 16-bit aligned across all targets.
+  // (Without this, different toolchains/targets can disagree about implicit padding,
+  // which can break remain_s parsing on some stations.)
+  uint8_t _pad0;     // must be 0
+
   // v2 additions (timers)
   uint16_t order_id; // stable ID for the order instance
   uint16_t remain_s; // remaining seconds at send time
+};
+
+// Central -> ALL nodes: current game phase.
+// Stations should ignore player input unless phase == Running.
+struct GameStatePayload {
+  uint8_t phase;   // 0=Idle, 1=Running, 2=Over
+  uint8_t level;   // 0..5 (optional informational)
+  uint8_t rsv0;
+  uint8_t rsv1;
 };
 
 struct PzOrderShowTextPayload {
