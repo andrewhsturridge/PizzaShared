@@ -5,7 +5,37 @@
 #define FW_VERSION         "0.1.0"
 
 // --- Radio (runtime) ---
-#define ESPNOW_CHANNEL     6   // fixed; Wi-Fi STA only during OTA window
+// Facility channel plan (current default):
+//   Soccer=1, Seashells=11, MazeGates=6, BallToss=1, Pizza=11, TRex=6
+//
+// This repo is currently hard-coded per-game (per your preference). If you
+// change this value, reflash all Pizza devices.
+#define ESPNOW_CHANNEL     11   // fixed; Wi-Fi STA only during OTA window
+
+// --- Wire framing ---
+// To prevent cross-game ESP-NOW interference, Pizza frames every payload with
+// a short signature:
+//   'P' 'Z' <wire_version>
+//
+// All Pizza devices should run with TX framed and RX legacy disabled.
+// For a rolling update, you can temporarily set:
+//   PZ_WIRE_TX_FRAMED=0 on the device(s) that must still talk to old firmware
+//   PZ_WIRE_RX_LEGACY=1 on devices that should accept old packets
+#ifndef PZ_WIRE_MAGIC0
+  #define PZ_WIRE_MAGIC0 'P'
+#endif
+#ifndef PZ_WIRE_MAGIC1
+  #define PZ_WIRE_MAGIC1 'Z'
+#endif
+#ifndef PZ_WIRE_VERSION
+  #define PZ_WIRE_VERSION 1
+#endif
+#ifndef PZ_WIRE_TX_FRAMED
+  #define PZ_WIRE_TX_FRAMED 1
+#endif
+#ifndef PZ_WIRE_RX_LEGACY
+  #define PZ_WIRE_RX_LEGACY 0
+#endif
 
 // --- Network defaults (used by NetCfg compiled defaults) ---
 #ifndef WIFI_DEFAULT_SSID

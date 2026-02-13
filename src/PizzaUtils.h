@@ -5,6 +5,11 @@
 #define PZ_LOGE(...)  do { Serial.printf("[ERR ] " __VA_ARGS__); Serial.println(); } while(0)
 #define PZ_LOGD(...)  do { Serial.printf("[DBG ] " __VA_ARGS__); Serial.println(); } while(0)
 
+// Warning-level log (used by diagnostic builds).
+// Keep it distinct from DBG so you can still see warnings even if you later
+// gate PZ_LOGD behind a compile-time flag.
+#define PZ_LOGW(...)  do { Serial.printf("[WARN] " __VA_ARGS__); Serial.println(); } while(0)
+
 namespace PizzaUtils {
   struct Ticker {
     uint32_t everyMs;
