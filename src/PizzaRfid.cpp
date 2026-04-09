@@ -23,6 +23,10 @@ namespace PizzaRfid {
     return true;
   }
 
+  bool present() {
+    return anyCardPresent();
+  }
+
   bool readUid(uint8_t* uid, uint8_t& uidLen){
     if (!s_rfid) return false;
     if (!anyCardPresent()) return false;

@@ -44,7 +44,7 @@ namespace PizzaAudioFS {
 
   // Hard cap the requested volume to keep playback comfortable and avoid clipping.
   // If you need it louder later, raise this cap.
-  static constexpr uint8_t VOL_HARD_CAP = 40;
+  static constexpr uint8_t VOL_HARD_CAP = 140;
 
   // Audio service task: keeps AudioGeneratorWAV fed even if the main loop is busy.
   static constexpr uint32_t AUDIO_TASK_STACK_WORDS = 4096;    // 4096 words (~16KB)
